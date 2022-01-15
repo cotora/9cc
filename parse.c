@@ -39,6 +39,15 @@ bool consume(char *op) {
   return true;
 }
 
+Token *consume_ident(){
+  if(token->kind==TK_IDENT){
+    Token *tok=token;
+    token=token->next;
+    return tok;
+  }
+  else return NULL;
+}
+
 // 次のトークンが期待している記号のときには、トークンを1つ読み進める。
 // それ以外の場合にはエラーを報告する。
 void expect(char *op) {
@@ -71,8 +80,8 @@ Token *new_token(TokenKind kind, Token *cur, char *str,int len) {
   return tok;
 }
 
-// 入力文字列pをトークナイズしてそれを返す
-Token *tokenize(char *p) {
+void tokenize() {
+  char *p=user_input;
   Token head;
   head.next = NULL;
   Token *cur = &head;
@@ -84,7 +93,7 @@ Token *tokenize(char *p) {
       continue;
     }
 
-    if (*p == '+' || *p == '-' || *p=='*' || *p=='/' || *p=='(' || *p==')') {
+    if (*p == '+' || *p == '-' || *p=='*' || *p=='/' || *p=='(' || *p==')' || *p==';') {
       cur = new_token(TK_RESERVED, cur, p++,1);
       continue;
     }
@@ -111,9 +120,14 @@ Token *tokenize(char *p) {
       continue;
     }
 
-    if(!strncmp(p,"==",2)){
-      cur=new_token(TK_RESERVED,cur,p,2);
-      p+=2;
+    if(*p=='='){
+      if(!strncmp(p,"==",2)){
+        cur=new_token(TK_RESERVED,cur,p,2);
+        p+=2;
+      }
+      else{
+        cur=new_token(TK_RESERVED,cur,p++,1);
+      }
       continue;
     }
 
@@ -129,11 +143,17 @@ Token *tokenize(char *p) {
       continue;
     }
 
+    if('a' <= *p && *p <= 'z'){
+      cur=new_token(TK_IDENT,cur,p++,1);
+      continue;
+    }
+
     error_at(p,"トークナイズできません");
   }
 
   new_token(TK_EOF, cur, p,1);
-  return head.next;
+  token=head.next;
+  return;
 }
 
 Node *new_node(NodeKind kind, Node *lhs, Node *rhs) {
@@ -151,16 +171,62 @@ Node *new_node_num(int val) {
   return node;
 }
 
+Node *new_node_ident(Token *tok){
+  Node *node = calloc(1,sizeof(Node));
+  node->kind=ND_LVAR;
+  node->offset=(tok->str[0] - 'a' + 1) * 8;
+  return node;
+}
+
+void program();
+Node *stmt();
 Node *expr();
-Node *mul();
-Node *primary();
-Node *unary();
+Node *assign();
 Node *equality();
 Node *relational();
 Node *add();
+Node *mul();
+Node *unary();
+Node *primary();
+
+Node *code[100];
+
+void program(){
+  int i=0;
+  while(!at_eof()){
+    code[i++]=stmt();
+  }
+  code[i]=NULL;
+}
+
+Node *stmt(){
+  Node *node =expr();
+  expect(";");
+  return node;
+}
 
 Node *expr(){
-  return equality();
+  return assign();
+}
+
+Node *assign(){
+  Node *node=equality();
+  if(consume("=")){
+    node=new_node(ND_ASSIGN,node,assign());
+  }
+  return node;
+}
+
+Node *equality(){
+  Node *node=relational();
+
+  for(;;){
+    if(consume("=="))
+      node=new_node(ND_EQU,node,relational());
+    else if(consume("!="))
+      node=new_node(ND_NOTEQU,node,relational());
+    else return node;
+  }
 }
 
 Node *relational(){
@@ -179,15 +245,29 @@ Node *relational(){
   }
 }
 
-Node *equality(){
-  Node *node=relational();
+Node *add() {
+  Node *node = mul();
 
-  for(;;){
-    if(consume("=="))
-      node=new_node(ND_EQU,node,relational());
-    else if(consume("!="))
-      node=new_node(ND_NOTEQU,node,relational());
-    else return node;
+  for (;;) {
+    if (consume("+"))
+      node = new_node(ND_ADD, node, mul());
+    else if (consume("-"))
+      node = new_node(ND_SUB, node, mul());
+    else
+      return node;
+  }
+}
+
+Node *mul() {
+  Node *node = unary();
+
+  for (;;) {
+    if (consume("*"))
+      node = new_node(ND_MUL, node, unary());
+    else if (consume("/"))
+      node = new_node(ND_DIV, node, unary());
+    else
+      return node;
   }
 }
 
@@ -207,32 +287,12 @@ Node *primary() {
     return node;
   }
 
+  //ローカル変数の場合
+  Token *tok=consume_ident();
+  if(tok){
+    return new_node_ident(tok);
+  }
+
   // そうでなければ数値のはず
   return new_node_num(expect_number());
-}
-
-Node *mul() {
-  Node *node = unary();
-
-  for (;;) {
-    if (consume("*"))
-      node = new_node(ND_MUL, node, unary());
-    else if (consume("/"))
-      node = new_node(ND_DIV, node, unary());
-    else
-      return node;
-  }
-}
-
-Node *add() {
-  Node *node = mul();
-
-  for (;;) {
-    if (consume("+"))
-      node = new_node(ND_ADD, node, mul());
-    else if (consume("-"))
-      node = new_node(ND_SUB, node, mul());
-    else
-      return node;
-  }
 }
