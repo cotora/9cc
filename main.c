@@ -9,6 +9,9 @@ int main(int argc, char **argv) {
   //トークナイズしてパースする
   user_input=argv[1];
   tokenize(user_input);
+  locals=calloc(1,sizeof(LVar));
+  locals->next=NULL;
+  locals->offset=0;
   program();
 
   //アセンブリの前半部分を出力
