@@ -29,4 +29,5 @@ assert 1 "10-2==2*4;"
 assert 0 "(5-4)*2==-3+6;"
 assert 1 "a=1;4+3;(6-2)==(4-1);(a+1)==2;"
 assert 5 "foo=3;bar=foo+2;"
+assert 10 "x=3;6+2;return x+7;10==1;10!=1;"
 echo OK
